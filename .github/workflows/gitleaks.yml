@@ -1,0 +1,37 @@
+name: gitleaks
+
+on:
+  workflow_call:
+    inputs:
+      sarif-upload:
+        description: Upload findings to GitHub code scanning (requires security-events write; free on public repos only)
+        type: boolean
+        default: true
+
+jobs:
+  scan:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          # gitleaks scans the full commit history, not just the current tree
+          fetch-depth: 0
+
+      - name: Install gitleaks 8.30.1 (checksum-verified)
+        shell: bash
+        run: |
+          curl -sSfL -o gitleaks.tar.gz \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tar.gz" | sha256sum --check
+          tar -xzf gitleaks.tar.gz gitleaks
+
+      - name: Scan full history
+        run: ./gitleaks git --redact --verbose --report-format sarif --report-path gitleaks.sarif
+
+      - name: Upload SARIF to code scanning
+        if: ${{ !cancelled() && inputs.sarif-upload }}
+        uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
+        with:
+          sarif_file: gitleaks.sarif
+          category: gitleaks
